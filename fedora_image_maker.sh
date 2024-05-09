@@ -176,16 +176,8 @@ function __hack_selinux() {
 	${IMGCREATE_CREATOR_PY}
 }
 
-function make_image_in_chroot() {
-	set -ex
-
-	# INSIDE chroot
-	mount -t proc none /proc
-	mount -t sysfs none /sys
-
-	if [ "$1" = "hack" ]; then
-		__hack_selinux
-	fi
+function make_image() {
+	set -e
 
 	# make loop file node 
 	LOOP_FILE=$(losetup -f)
@@ -206,6 +198,10 @@ function make_image_in_chroot() {
 	#make sure we have all the tools we need
 	dnf install util-linux-ng tar appliance-tools git -y
 
+	if [ "$1" = "hack" ]; then
+		__hack_selinux
+	fi
+
 	# get kickstart repo
 	git clone ${KS_REPO_SITE}/${KS_REPO_NAME}
 	cd ${KS_REPO_NAME}
@@ -220,6 +216,16 @@ function make_image_in_chroot() {
 		--release ${RELEASE_NUM} \
 		-o ${TMP_DIR} \
 		-d -v --no-compress
+}
+
+function make_image_in_chroot() {
+	set -x
+
+	# INSIDE chroot
+	mount -t proc none /proc
+	mount -t sysfs none /sys
+
+	make_image $1
 
 	umount /proc
 	umount /sys
