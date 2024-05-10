@@ -14,14 +14,16 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
 
+set -x
+
 IMAGE_BUILDER='fedora_image_maker'
 
 # this image includes the pkg we need for building a Fedora image
 # dnf install util-linux-ng tar appliance-tools git -y
-VERSION='39'
-DOCKER_IMAGE="docker.io/fedorariscv/fedora-rv64-image-builder:$VERSION"
+VERSION='40'
+DOCKER_IMAGE="docker.io/fedorariscv/base:$VERSION"
 
-MOCK_CONFIG="fedora-$VERSION-riscv64"
+MOCK_CONFIG="fedora-riscv64-template.cfg"
 PKGS_LIST='appliance-tools git  dnf  util-linux-ng'
 DNF_REPO_URL="http://openkoji.iscas.ac.cn/kojifiles/repos/f$VERSION-build/latest/riscv64/"
 DNF_REPO_NAME='bootstrap-repo'
@@ -77,15 +79,16 @@ function check_requirements() {
 # the mock Fedora roofs with some pkgs:
 # util-linux-ng tar appliance-tools git
 function create_rootfs_by_mock() {
-	# mock -r ${MOCK_CONFIG} --rootdir $PWD/${1} --shell
-	#exit
-	mock -r ${MOCK_CONFIG} --rootdir $PWD/${1} --install ${PKGS_LIST}
-	#ROOTFS_PATH=/var/lib/mock/${MOCK_CONFIG}/root
-	# mkdir -p $PWD/${1}
-	# release tarball to dir
-	# pushd ${1}/
-	# cp -a /var/lib/mock/${MOCK_CONFIG}/root/* .
-	# popd
+
+	cleanup_mock_environment
+
+	mock -r fedora-riscv64-template.cfg \
+		--rootdir $PWD/${1} \
+		--resultdir $PWD/${1}/tmp \
+		--config-opts releasever=$VERSION \
+		--config-opts root=fedora-$VERSION-riscv64 \
+		--install ${PKGS_LIST}
+
 	cp $0 $PWD/${1}/build.sh
 }
 
@@ -97,7 +100,7 @@ function create_rootfs_by_Image() {
 	guestfish -a ${FEDORA_IMAGE_PATH} -m ${ROOTFS_NODE} tar-out / ./${1}.tar
 	# release tarball to dir
 	pushd ${1}/
-	tar -xvpf ../${1}.tar
+	tar -xpf ../${1}.tar
 	rm -f ../${1}.tar
 	popd
 	cp $0 $PWD/${1}/build.sh
@@ -150,7 +153,7 @@ function export_rootfs_for_chroot() {
 
 	# release tarball to dir
 	pushd ${1}/
-	tar -xvpf ../${1}.tar
+	tar -xpf ../${1}.tar
 	rm -f ../${1}.tar
 	popd
 }
@@ -219,22 +222,34 @@ function make_image() {
 }
 
 function make_image_in_chroot() {
-	set -x
 
 	# INSIDE chroot
 	mount -t proc none /proc
-	mount -t sysfs none /sys
+
+	if [ "$1" = "hack" ]; then
+		mount -t sysfs none /sys
+	fi
 
 	make_image $1
 
 	umount /proc
-	umount /sys
+
+	if [ "$1" = "hack" ]; then
+		umount /sys
+	fi
 }
 
 # cleanup functions
 function cleanup_podman_environment() {
 	podman stop ${1}
 	podman rm ${1}
+}
+
+function cleanup_mock_environment() {
+	mock -r fedora-riscv64-template.cfg \
+		--config-opts releasever=$VERSION \
+		--config-opts root=fedora-$VERSION-riscv64 \
+		--scrub=all
 }
 
 function move_results_directory() {
@@ -259,7 +274,8 @@ case "$1" in
 		make_image_in_chroot ${2}
 		;;
 	--clean)
-		cleanup_podman_environment $IMAGE_BUILDER
+		check_command 'podman' && cleanup_podman_environment $IMAGE_BUILDER
+		check_command 'mock' && cleanup_mock_environment 
 		cleanup_external_environment $IMAGE_BUILDER
 		;;
 	--test)
@@ -283,6 +299,7 @@ case "$1" in
 			create_rootfs_by_mock $IMAGE_BUILDER
 			chroot_build $IMAGE_BUILDER 'hack'
 			move_results_directory $IMAGE_BUILDER
+			cleanup_mock_environment
 			cleanup_external_environment $IMAGE_BUILDER
 			echo "The image is in $PWD/${IMAGE_NAME}_f${VERSION}_${RELEASE_NUM}"
 		) |& tee -a "$LOG_DIR/mock_build.log"
