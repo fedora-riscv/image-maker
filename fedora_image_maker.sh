@@ -259,6 +259,12 @@ function move_results_directory() {
 }
 
 function cleanup_external_environment() {
+	MOUNT_POINTS=$(mount | grep $PWD/${1} | awk '{print $3}' | sort -r)
+
+	for mp in $MOUNT_POINTS; do
+		umount $mp
+	done
+	
 	rm -rf $PWD/${1}
 }
 
