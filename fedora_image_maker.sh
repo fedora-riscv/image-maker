@@ -20,11 +20,11 @@ IMAGE_BUILDER='fedora_image_maker'
 
 # this image includes the pkg we need for building a Fedora image
 # dnf install util-linux-ng tar appliance-tools git -y
-VERSION='40'
+VERSION='41'
 DOCKER_IMAGE="docker.io/fedorariscv/base:$VERSION"
 
 MOCK_CONFIG="fedora-riscv64-template.cfg"
-PKGS_LIST='appliance-tools git  dnf  util-linux-ng'
+PKGS_LIST='appliance-tools git dnf util-linux-ng wget gdisk'
 DNF_REPO_URL="http://openkoji.iscas.ac.cn/kojifiles/repos/f$VERSION-build/latest/riscv64/"
 DNF_REPO_NAME='bootstrap-repo'
 
